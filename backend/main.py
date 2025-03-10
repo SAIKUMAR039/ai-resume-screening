@@ -14,7 +14,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Local development
-        "https://your-frontend-url.com"  # Deployed frontend URL
+        "https://airesume-screening.vercel.app/"  # Deployed frontend URL
     ],
     allow_credentials=True,
     allow_methods=["*"],
