@@ -1,0 +1,14 @@
+Python
+Java
+JavaScript
+React
+Node.js
+Machine Learning
+Deep Learning
+Data Science
+SQL
+Django
+Flask
+TensorFlow
+Pandas
+AWS
