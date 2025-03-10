@@ -33,7 +33,7 @@ const App = () => {
   const [error, setError] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [showDevInfo, setShowDevInfo] = useState(false);
+  const [showDevInfo, setShowDevInfo] = useState(true);
 
   // Handle file selection
   const handleFileChange = (event) => {
