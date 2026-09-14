@@ -8,24 +8,48 @@ import {
   Loader, 
   Zap,
   CheckCircle,
-  BarChart,
+  BarChart2,
   Award,
   Star,
-  ThumbsUp,
   User,
-  Clock,
   TrendingUp,
-  Settings,
   Github,
   Mail,
   Linkedin,
-  Code,
   Globe,
-  Link
+  Users,
+  Search,
+  Filter,
+  Sparkles,
+  Trash2,
+  RefreshCw,
+  Layers,
+  Cpu,
+  Database
 } from "lucide-react";
 import AnalysisDisplay from "./components/AnalysisDisplay";
+import CandidateTable from "./components/CandidateTable";
+import CandidateDetailModal from "./components/CandidateDetailModal";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
+const SAMPLE_JOB_DESCRIPTIONS = [
+  {
+    title: "Python Full Stack Engineer",
+    text: "Looking for a Python Developer with experience in FastAPI, PostgreSQL, React.js, Docker, and REST APIs. Experience with spaCy or NLP is a plus."
+  },
+  {
+    title: "AI / ML & NLP Specialist",
+    text: "Seeking an NLP Engineer proficient in Python, spaCy, Machine Learning, Deep Learning, TensorFlow/PyTorch, SQL, and AWS."
+  },
+  {
+    title: "Frontend React Engineer",
+    text: "Required React Developer skilled in JavaScript, TypeScript, Tailwind CSS, Redux, REST API integration, and Git."
+  }
+];
 
 const App = () => {
+  const [activeTab, setActiveTab] = useState("screen"); // 'screen', 'dashboard', 'directory'
   const [selectedFile, setSelectedFile] = useState(null);
   const [jobDescription, setJobDescription] = useState("");
   const [analysis, setAnalysis] = useState("");
@@ -33,30 +57,65 @@ const App = () => {
   const [error, setError] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
-  const [showDevInfo, setShowDevInfo] = useState(true);
 
-  // Handle file selection
-  const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
+  // Ranked Candidates & Dashboard state
+  const [candidates, setCandidates] = useState([]);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [searchSkill, setSearchSkill] = useState("");
+  const [minScoreFilter, setMinScoreFilter] = useState("");
+
+  // Fetch candidates from API
+  const fetchCandidates = async () => {
+    try {
+      let url = `${API_BASE_URL}/api/candidates/ranked`;
+      if (searchSkill || minScoreFilter) {
+        url = `${API_BASE_URL}/api/candidates/filter?`;
+        if (searchSkill) url += `skill=${encodeURIComponent(searchSkill)}&`;
+        if (minScoreFilter) url += `min_score=${minScoreFilter}`;
+      }
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setCandidates(data);
+        } else if (data.candidates) {
+          setCandidates(data.candidates);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch candidates from backend API:", err);
+    }
   };
 
-  // Handle job description input
+  useEffect(() => {
+    fetchCandidates();
+  }, [searchSkill, minScoreFilter]);
+
+  const handleFileChange = (event) => {
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+    }
+  };
+
   const handleJobDescriptionChange = (event) => {
     setJobDescription(event.target.value);
   };
 
-  // Handle resume upload
+  const loadSampleJD = (sampleText) => {
+    setJobDescription(sampleText);
+  };
+
   const handleUpload = async () => {
     if (!selectedFile) {
-      setError("Please select a resume file.");
+      setError("Please select a resume file (PDF, DOCX, or TXT).");
       return;
     }
-    if (!jobDescription) {
-      setError("Please enter a job description.");
+    if (!jobDescription || !jobDescription.strip?.() && !jobDescription.trim()) {
+      setError("Please enter or select a job description.");
       return;
     }
 
-    setError(""); // Clear previous errors
+    setError("");
     setLoading(true);
 
     const formData = new FormData();
@@ -64,28 +123,45 @@ const App = () => {
     formData.append("job_description", jobDescription);
 
     try {
-      const response = await fetch("https://ai-resume-screening-1.onrender.com/upload_resume/", {
+      let response = await fetch(`${API_BASE_URL}/api/screen`, {
         method: "POST",
         body: formData,
       });
+
+      if (!response.ok) {
+        response = await fetch(`${API_BASE_URL}/upload_resume/`, {
+          method: "POST",
+          body: formData,
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log("Backend Response:", result);
 
       if (result.error) {
         setError(result.error);
       } else {
-        setAnalysis(result.ai_analysis);
+        if (result.ai_explanation || result.ai_analysis) {
+          const analysisText = result.ai_analysis || (
+            `**Candidate Name**: ${result.candidate_name}\n` +
+            `**Overall Match Score**: ${result.score}%\n` +
+            `**Recommendation**: ${result.recommendation}\n\n` +
+            `**Matched Required Skills**: ${result.matched_skills?.join(", ") || "None"}\n` +
+            `**Missing Required Skills**: ${result.missing_skills?.join(", ") || "None"}\n\n` +
+            `**AI Analysis & Rationale**:\n${result.ai_explanation}`
+          );
+          setAnalysis(analysisText);
+        }
         setShowSuccessAnimation(true);
         setTimeout(() => setShowSuccessAnimation(false), 3000);
+        fetchCandidates();
       }
     } catch (error) {
       console.error("Fetch error:", error);
-      setError("Failed to upload resume. Please try again.");
+      setError("Failed to upload and screen resume. Verify backend server is running on http://localhost:8000.");
     } finally {
       setLoading(false);
     }
@@ -112,661 +188,444 @@ const App = () => {
     }
   };
 
-  // Toggle developer info
-  const toggleDevInfo = () => {
-    setShowDevInfo(!showDevInfo);
-  };
-
-  // Floating 3D icons effect
-  const FloatingIcon = ({ icon: Icon, delay, x, y }) => {
-    return (
-      <motion.div
-        className="absolute text-indigo-400 opacity-30"
-        initial={{ x, y, scale: 0.5, opacity: 0 }}
-        animate={{ 
-          y: y - 15,
-          opacity: 0.3,
-          scale: 0.7,
-          rotateY: [0, 180, 360],
-          rotateZ: [-10, 10, -10],
-        }}
-        transition={{
-          duration: 12,
-          delay,
-          repeat: Infinity,
-          repeatType: "reverse",
-        }}
-      >
-        <Icon size={32} />
-      </motion.div>
-    );
-  };
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1,
-      transition: { 
-        staggerChildren: 0.15,
-        delayChildren: 0.2
+  const handleDeleteCandidate = async (candidateId) => {
+    if (!window.confirm("Are you sure you want to delete this candidate?")) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/candidates/${candidateId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchCandidates();
       }
+    } catch (err) {
+      console.error("Failed to delete candidate:", err);
     }
   };
 
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { 
-      y: 0, 
-      opacity: 1,
-      transition: { 
-        type: "spring", 
-        stiffness: 300,
-        damping: 24
-      }
-    }
-  };
+  // Metric stats
+  const totalCandidatesCount = candidates.length;
+  const screenedCount = candidates.filter(c => c.score != null).length;
+  const avgScore = candidates.length > 0
+    ? roundTo(candidates.reduce((acc, c) => acc + (c.score || 0), 0) / candidates.length, 1)
+    : 0;
+  const topCandidate = candidates.length > 0 ? candidates[0] : null;
 
-  const floatingIcons = [
-    { icon: FileText, delay: 0, x: -100, y: 100 },
-    { icon: BarChart, delay: 2, x: 150, y: 50 },
-    { icon: Award, delay: 4, x: -150, y: 200 },
-    { icon: Star, delay: 1, x: 120, y: 180 },
-    { icon: ThumbsUp, delay: 3, x: -80, y: 300 },
-    { icon: User, delay: 5, x: 200, y: 250 },
-    { icon: Clock, delay: 2.5, x: -200, y: 150 },
-    { icon: TrendingUp, delay: 0.5, x: 180, y: 120 },
-    { icon: Settings, delay: 4.5, x: -120, y: 220 },
-  ];
-
-  // Developer information from GitHub
-  const devInfo = {
-    name: "Sai Kumar",
-    github: "https://github.com/SAIKUMAR039",
-    img: "https://github.com/SAIKUMAR039.png",
-    email: "saikumarthota2004@gmail.com",
-    linkedin: "https://www.linkedin.com/in/sai-kumar-thota-101764252/",
-    portfolio: "https://www.saikumarthota.live",
-    bio: "Software Developer passionate about building innovative solutions.",
-    skills: ["Python", "React", "Machine Learning", "Full Stack Development", "Data Science"],
-    projects: [
-      {
-        name: "File Share Web App",
-        description: "Web application for sharing files securely.",
-        
-        link:"https://file-shar-e.vercel.app/"
-      },
-      {
-        name: "Portfolio Website",
-        description: "Personal portfolio showcasing projects and skills.",
-        link:"https://www.saikumarthota.live"
-      },
-      {
-        name: "ML Image Recognition",
-        description: "Machine learning model for image recognition and classification.",
-        link:"https://imagine-id.vercel.app/"
-      }
-    ]
-  };
+  function roundTo(num, dec) {
+    return Math.round(num * Math.pow(10, dec)) / Math.pow(10, dec);
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8 overflow-hidden relative">
-      {/* Background floating icons */}
-      {floatingIcons.map((iconProps, index) => (
-        <FloatingIcon key={index} {...iconProps} />
-      ))}
-      
-      <motion.div 
-        className="max-w-4xl mx-auto relative z-10"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7 }}
-      >
-        {/* Developer Info Card */}
-        <motion.div
-          className="mt-8 relative"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          >
-          <motion.button
-            onClick={toggleDevInfo}
-            className="w-full bg-gradient-to-r from-gray-800 to-indigo-900 text-white py-3 px-4 rounded-lg shadow-md flex items-center justify-center space-x-2"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            >
-              <Code size={20} />
-            </motion.div>
-            <span>
-              {showDevInfo ? "Hide Developer Info" : "Show Developer Info"}
-            </span>
-          </motion.button>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Background Decorative Gradients */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-indigo-600/15 rounded-full blur-[140px]" />
+        <div className="absolute top-1/2 -left-40 w-[500px] h-[500px] bg-purple-600/15 rounded-full blur-[140px]" />
+      </div>
 
-          <AnimatePresence>
-            {showDevInfo && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, y: -20 }}
-                animate={{ opacity: 1, height: "auto", y: 0 }}
-                exit={{ opacity: 0, height: 0, y: -20 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="mt-4 bg-white rounded-xl shadow-lg overflow-hidden"
-              >
-                <div className="bg-gradient-to-r from-indigo-800 to-purple-800 px-6 py-6 relative overflow-hidden">
-                  {/* Animated background elements */}
-                  <motion.div 
-                    className="absolute top-0 left-0 w-40 h-40 bg-white opacity-5 rounded-full"
-                    initial={{ x: -50, y: -50 }}
-                    animate={{ x: -30, y: -30 }}
-                    transition={{ 
-                      duration: 4, 
-                      repeat: Infinity, 
-                      repeatType: "reverse" 
-                    }}
-                  />
-                  <motion.div 
-                    className="absolute bottom-0 right-0 w-60 h-60 bg-white opacity-5 rounded-full"
-                    initial={{ x: 30, y: 30 }}
-                    animate={{ x: 50, y: 50 }}
-                    transition={{ 
-                      duration: 5, 
-                      repeat: Infinity, 
-                      repeatType: "reverse" 
-                    }}
-                  />
-                  
-                  <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start">
-                    <motion.div 
-                      className="flex-shrink-0 mb-4 md:mb-0 md:mr-6"
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.5 }}
-                    >
-                      <div className="relative">
-                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                          {devInfo.img ? (
-                            <img src={devInfo.img} alt="Developer" className="rounded-full" />
-                          ) : (
-                            devInfo.name[0].toUpperCase()
-                          )}
-                        </div>
-                        
-                      </div>
-                    </motion.div>
-                    
-                    <div className="text-center md:text-left">
-                      <motion.h2 
-                        className="text-2xl font-bold text-white"
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.1 }}
-                      >
-                        {devInfo.name}
-                      </motion.h2>
-                      <motion.p 
-                        className="text-indigo-200 mt-1"
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.2 }}
-                      >
-                        {devInfo.bio}
-                      </motion.p>
-                      
-                      <motion.div 
-                        className="flex mt-4 justify-center md:justify-start space-x-3"
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.5, delay: 0.3 }}
-                      >
-                        <motion.a 
-                          href={devInfo.github} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all duration-300"
-                          whileHover={{ scale: 1.1, rotate: 5 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Github size={20} className="text-black" />
-                        </motion.a>
-                        <motion.a 
-                          href={`mailto:${devInfo.email}`}
-                          className="bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all duration-300"
-                          whileHover={{ scale: 1.1, rotate: 5 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Mail size={20} className="text-black" />
-                        </motion.a>
-                        <motion.a 
-                          href={devInfo.linkedin} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all duration-300"
-                          whileHover={{ scale: 1.1, rotate: 5 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Linkedin size={20} className="text-black" />
-                        </motion.a>
-                        <motion.a 
-                          href={devInfo.portfolio}
-                          target="_blank"
-                          className="bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all duration-300"
-                          whileHover={{ scale: 1.1, rotate: 5 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Globe size={20} className="text-black" />
-                        </motion.a>
-                      </motion.div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="p-6">
-                  {/* Skills Section */}
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Skills</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {devInfo.skills.map((skill, index) => (
-                        <motion.span
-                          key={index}
-                          className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium"
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 * index }}
-                          whileHover={{ 
-                            scale: 1.05, 
-                            backgroundColor: "#c7d2fe", 
-                            boxShadow: "0 2px 5px rgba(99, 102, 241, 0.2)" 
-                          }}
-                        >
-                          {skill}
-                        </motion.span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Projects Section */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">Featured Projects</h3>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-center justify-center">
-                      {devInfo.projects.map((project, index) => (
-                        <motion.div
-                          key={index}
-                          className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-300"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.2 * index }}
-                          whileHover={{ 
-                            y: -5,
-                            boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)"
-                          }}
-                        >
-                          <a href={project.link} target="_blank" rel="noopener noreferrer">
-                            <Link size={20} className="text-indigo-700" />
-                          
-                          <h4 className="font-medium text-indigo-700">{project.name}</h4>
-                          <p className="text-sm text-gray-600 mt-1">{project.description}</p>
-                          </a>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                <motion.div 
-                  className="px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 text-center text-sm text-gray-600"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  <p>© 2025 Sai Kumar | AI Resume Screening Tool</p>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-        {/* Success Animation Overlay */}
+      {/* Header / Navbar */}
+      <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          {/* Logo & Brand */}
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+              <Zap size={22} className="text-white" />
+            </div>
+            <div>
+              <span className="text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-purple-300">
+                ScreenAI <span className="text-indigo-400 font-medium text-sm ml-1 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20">v2.0</span>
+              </span>
+              <div className="flex items-center space-x-2 text-xs text-slate-400">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>FastAPI + spaCy NLP Engine Active</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Segmented Tabs */}
+          <nav className="flex items-center space-x-1 bg-slate-800/80 p-1.5 rounded-xl border border-slate-700/50 shadow-inner">
+            <button
+              onClick={() => setActiveTab("screen")}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === "screen"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+              }`}
+            >
+              <Sparkles size={14} />
+              <span>Screening Tool</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+              }`}
+            >
+              <BarChart2 size={14} />
+              <span>Analytics</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("directory")}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === "directory"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+              }`}
+            >
+              <Users size={14} />
+              <span>Candidates ({candidates.length})</span>
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+        
+        {/* Success Overlay */}
         <AnimatePresence>
           {showSuccessAnimation && (
             <motion.div 
-              className="fixed inset-0 flex items-center justify-center bg-indigo-900 bg-opacity-70 z-50"
+              className="fixed inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-md z-50"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
               <motion.div 
-                className="bg-white rounded-full p-10"
-                initial={{ scale: 0.5 }}
-                animate={{ 
-                  scale: [0.5, 1.2, 1],
-                  rotate: [0, 10, 0] 
-                }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="bg-slate-900 border border-indigo-500/30 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center max-w-sm"
+                initial={{ scale: 0.8 }}
+                animate={{ scale: [0.8, 1.05, 1] }}
+                transition={{ duration: 0.5 }}
               >
-                <motion.div
-                  animate={{
-                    scale: [1, 1.2, 1],
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: 2,
-                    repeatType: "reverse"
-                  }}
-                >
-                  <CheckCircle size={80} className="text-green-500" />
-                </motion.div>
+                <div className="w-20 h-20 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/30">
+                  <CheckCircle size={44} />
+                </div>
+                <h3 className="text-xl font-bold text-white">Screening Complete!</h3>
+                <p className="text-sm text-slate-400 mt-1">Resume parsed, matched, and candidate ranked successfully.</p>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="bg-white rounded-xl shadow-2xl overflow-hidden backdrop-blur-sm bg-opacity-95 mt-8">
-          <div className="p-8">
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={containerVariants}
-              className="space-y-8"
-            >
-              <motion.div variants={itemVariants} className="text-center">
-                <div className="flex justify-center mb-4 relative">
-                  <motion.div
-                    initial={{ scale: 0.8 }}
-                    animate={{ 
-                      scale: [0.8, 1.2, 1],
-                      rotate: [0, 15, 0],
-                      y: [0, -10, 0]
-                    }}
-                    transition={{ 
-                      duration: 2,
-                      repeat: Infinity,
-                      repeatDelay: 3
-                    }}
-                    className="text-indigo-600 relative z-10"
-                  >
-                    <Zap size={50} className="inline-block" />
-                  </motion.div>
-                  
-                  {/* Glow effect */}
-                  <motion.div
-                    className="absolute w-20 h-20 bg-indigo-300 rounded-full filter blur-xl opacity-50"
-                    initial={{ scale: 0.8 }}
-                    animate={{ 
-                      scale: [0.8, 1.5, 0.8],
-                      opacity: [0.3, 0.6, 0.3]
-                    }}
-                    transition={{ 
-                      duration: 3,
-                      repeat: Infinity,
-                      repeatType: "reverse"
-                    }}
-                  />
-                </div>
-                
-                <motion.h1 
-                  className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600"
-                  animate={{ 
-                    backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"]
-                  }}
-                  transition={{ 
-                    duration: 15, 
-                    repeat: Infinity,
-                    ease: "linear" 
-                  }}
-                  style={{ backgroundSize: "200% auto" }}
-                >
-                  AI Resume Screening
-                </motion.h1>
-                
-                <motion.p 
-                  className="mt-2 text-gray-600"
-                  variants={itemVariants}
-                >
-                  Upload your resume and job description for intelligent analysis
-                </motion.p>
-              </motion.div>
+        {/* Tab 1: Screening Tool */}
+        {activeTab === "screen" && (
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            {/* Title Section */}
+            <div className="text-center max-w-2xl mx-auto space-y-2">
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                AI Resume Screening & Ranking Engine
+              </h1>
+              <p className="text-sm text-slate-400">
+                Upload candidate resumes (PDF, DOCX, TXT) and match against job descriptions using spaCy NLP entity extraction and deterministic 4-factor scoring.
+              </p>
+            </div>
 
-              {/* File Upload Area */}
-              <motion.div 
-                variants={itemVariants}
-                whileHover={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-              >
-                <label 
-                  htmlFor="file-upload"
-                  className={`relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-300 ease-in-out ${
-                    dragActive 
-                      ? "border-indigo-500 bg-indigo-50" 
-                      : "border-gray-300 hover:border-indigo-400 hover:bg-gray-50"
-                  }`}
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                >
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <motion.div
-                      className="relative"
-                    >
-                      <motion.div
-                        initial={{ rotateY: 0, rotateX: 0 }}
-                        animate={{ 
-                          rotateY: [0, 360],
-                          rotateX: [0, 15, 0, -15, 0]
-                        }}
-                        transition={{ 
-                          rotateY: { duration: 5, repeat: Infinity, ease: "linear" },
-                          rotateX: { duration: 3, repeat: Infinity, ease: "easeInOut" }
-                        }}
-                        className="mb-3 text-indigo-500"
-                        style={{ perspective: 1000 }}
-                      >
-                        <Upload size={60} />
-                      </motion.div>
-                      
-                      {/* Subtle pulsing shadow */}
-                      <motion.div
-                        className="absolute -inset-2 rounded-full bg-indigo-300 -z-10 filter blur-md"
-                        animate={{ 
-                          opacity: [0.1, 0.3, 0.1],
-                          scale: [0.8, 1.1, 0.8]
-                        }}
-                        transition={{ 
-                          duration: 3,
-                          repeat: Infinity,
-                          repeatType: "reverse"
-                        }}
-                      />
-                    </motion.div>
-                    
-                    <p className="mb-2 text-sm text-gray-600 font-medium">
-                      <motion.span 
-                        className="font-semibold text-indigo-600"
-                        animate={{ color: ["#4f46e5", "#818cf8", "#4f46e5"] }}
-                        transition={{ duration: 3, repeat: Infinity }}
-                      >
-                        Click to upload
-                      </motion.span> or drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500">PDF files only</p>
-                    {selectedFile && (
-                      <motion.div 
-                        className="mt-3 flex items-center text-indigo-500 bg-indigo-50 px-3 py-2 rounded-lg"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <FileText size={16} className="mr-2" />
-                        <span className="text-sm font-medium truncate max-w-xs">
-                          {selectedFile.name}
-                        </span>
-                      </motion.div>
-                    )}
-                  </div>
-                  <input 
-                    id="file-upload" 
-                    type="file" 
-                    className="hidden" 
-                    onChange={handleFileChange} 
-                    accept=".pdf" 
-                  />
-                </label>
-              </motion.div>
+            {/* 2-Column Grid Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               
-              {/* Job Description */}
-              <motion.div 
-                variants={itemVariants}
-                whileHover={{ scale: 1.01 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15 }}
-              >
-                <div className="flex items-center mb-2">
-                  <motion.div
-                    animate={{ 
-                      rotateZ: [0, 10, 0, -10, 0],
-                      scale: [1, 1.1, 1]
-                    }}
-                    transition={{ 
-                      duration: 3,
-                      repeat: Infinity,
-                      repeatType: "reverse"
-                    }}
-                    className="mr-2 text-indigo-600"
+              {/* Left Column: Upload Resume */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <FileText size={18} />
+                      </div>
+                      <h2 className="text-base font-bold text-white">1. Candidate Resume Upload</h2>
+                    </div>
+                    <span className="text-xs text-slate-500">PDF, DOCX, TXT</span>
+                  </div>
+
+                  {/* Dropzone */}
+                  <label 
+                    htmlFor="file-upload"
+                    className={`relative flex flex-col items-center justify-center w-full h-56 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
+                      dragActive 
+                        ? "border-indigo-500 bg-indigo-500/10" 
+                        : selectedFile
+                        ? "border-emerald-500/50 bg-emerald-500/5"
+                        : "border-slate-700 hover:border-indigo-500/60 hover:bg-slate-800/40 bg-slate-950/40"
+                    }`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
                   >
-                    <Briefcase size={24} />
-                  </motion.div>
-                  <label htmlFor="job-description" className="block text-sm font-medium text-gray-700">
-                    Job Description
+                    {selectedFile ? (
+                      <div className="flex flex-col items-center text-center p-4">
+                        <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3 border border-emerald-500/30">
+                          <CheckCircle size={28} />
+                        </div>
+                        <p className="text-sm font-semibold text-white truncate max-w-xs">{selectedFile.name}</p>
+                        <p className="text-xs text-slate-400 mt-1">{(selectedFile.size / 1024).toFixed(1)} KB • Ready to analyze</p>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                          className="mt-3 text-xs text-rose-400 hover:text-rose-300 underline"
+                        >
+                          Remove file
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center text-center p-4">
+                        <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-3 border border-indigo-500/20">
+                          <Upload size={24} />
+                        </div>
+                        <p className="text-sm font-medium text-slate-300">
+                          <span className="text-indigo-400 font-semibold">Click to browse</span> or drag & drop resume
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Supports PDF, DOCX, and TXT files (Max 15MB)</p>
+                      </div>
+                    )}
+                    <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.docx,.txt" />
                   </label>
                 </div>
-                <textarea
-                  id="job-description"
-                  placeholder="Enter the job description here..."
-                  value={jobDescription}
-                  onChange={handleJobDescriptionChange}
-                  className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out"
-                />
-              </motion.div>
 
-              {/* Upload Button */}
-              <motion.div variants={itemVariants}>
-                <motion.button
-                  onClick={handleUpload}
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden relative"
-                  whileHover={{ 
-                    scale: 1.03,
-                    boxShadow: "0 10px 25px -5px rgba(79, 70, 229, 0.4)"
-                  }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  {/* Button background animation */}
-                  <motion.div 
-                    className="absolute inset-0 w-full h-full"
-                    style={{ 
-                      backgroundImage: "linear-gradient(to right, #4f46e5, #8b5cf6, #4f46e5)",
-                      backgroundSize: "200% 100%"
-                    }}
-                    animate={{
-                      backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"]
-                    }}
-                    transition={{
-                      duration: 5,
-                      repeat: Infinity,
-                      ease: "linear"
-                    }}
-                  />
-                  
-                  {/* Button content */}
-                  <span className="relative flex items-center justify-center">
-                    {loading ? (
-                      <>
-                        <motion.span
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                          className="mr-2"
-                        >
-                          <Loader size={24} />
-                        </motion.span>
-                        <span className="text-lg">Analyzing Resume...</span>
-                      </>
-                    ) : (
-                      <>
-                        <motion.span
-                          animate={{ 
-                            scale: [1, 1.15, 1],
-                            rotate: [0, 5, 0, -5, 0]
-                          }}
-                          transition={{ 
-                            duration: 2,
-                            repeat: Infinity,
-                            repeatDelay: 1
-                          }}
-                          className="mr-3"
-                        >
-                          <FileText size={24} />
-                        </motion.span>
-                        <span className="text-lg">Analyze Resume</span>
-                      </>
-                    )}
-                  </span>
-                </motion.button>
-              </motion.div>
+                <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <Cpu size={16} className="text-indigo-400 flex-shrink-0" />
+                  <span>spaCy NLP will parse skills, education, experience, and contact info automatically.</span>
+                </div>
+              </div>
 
-              {/* Display Errors */}
-              <AnimatePresence>
-                {error && (
-                  <motion.div 
-                    variants={itemVariants}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="p-4 bg-red-50 rounded-lg border border-red-200"
-                  >
-                    <div className="flex">
-                      <motion.div
-                        animate={{ rotate: [0, 10, 0, -10, 0] }}
-                        transition={{ 
-                          duration: 1.5, 
-                          repeat: 3,
-                          repeatType: "reverse"
-                        }}
-                        className="text-red-500 mr-2 flex-shrink-0"
-                      >
-                        <AlertCircle size={20} />
-                      </motion.div>
-                      <p className="text-red-600">{error}</p>
+              {/* Right Column: Job Description */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <Briefcase size={18} />
+                      </div>
+                      <h2 className="text-base font-bold text-white">2. Job Description Requirements</h2>
                     </div>
-                  </motion.div>
+                    {jobDescription && (
+                      <button
+                        onClick={() => setJobDescription("")}
+                        className="text-xs text-slate-500 hover:text-slate-300"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Sample JD Presets */}
+                  <div className="mb-3">
+                    <span className="text-xs text-slate-400 block mb-1.5 font-medium">Load Quick Presets:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SAMPLE_JOB_DESCRIPTIONS.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => loadSampleJD(preset.text)}
+                          className="text-[11px] bg-slate-800 hover:bg-slate-700 text-indigo-300 px-2.5 py-1 rounded-lg border border-slate-700 transition"
+                        >
+                          + {preset.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <textarea
+                    placeholder="Enter or paste target job description requirements (e.g. Looking for a Python Engineer with FastAPI, PostgreSQL, spaCy, and React)..."
+                    value={jobDescription}
+                    onChange={handleJobDescriptionChange}
+                    className="w-full h-44 p-4 bg-slate-950/80 border border-slate-700/80 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>Characters: {jobDescription.length}</span>
+                  <span>Words: {jobDescription.trim() ? jobDescription.trim().split(/\s+/).length : 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action CTA Button */}
+            <div className="max-w-xl mx-auto">
+              <button
+                onClick={handleUpload}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 px-8 rounded-xl shadow-xl shadow-indigo-600/25 transition duration-200 transform active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg space-x-3"
+              >
+                {loading ? (
+                  <>
+                    <Loader size={22} className="animate-spin text-white" />
+                    <span>Executing spaCy NLP & Match Engine...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={22} />
+                    <span>Screen & Match Resume</span>
+                  </>
                 )}
-              </AnimatePresence>
-            </motion.div>
+              </button>
+
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-sm flex items-center"
+                >
+                  <AlertCircle size={18} className="mr-2 flex-shrink-0 text-rose-400" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Analysis Output Section */}
+            {analysis && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pt-4">
+                <AnalysisDisplay analysis={analysis} />
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Tab 2: Dashboard */}
+        {activeTab === "dashboard" && (
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-extrabold text-white">Recruiter Analytics & KPI Overview</h1>
+                <p className="text-xs text-slate-400">Database screening metrics and top candidate rankings</p>
+              </div>
+              <button
+                onClick={fetchCandidates}
+                className="flex items-center space-x-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg border border-slate-700 transition"
+              >
+                <RefreshCw size={14} />
+                <span>Refresh Data</span>
+              </button>
+            </div>
+
+            {/* KPI Metrics Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg flex items-center space-x-4">
+                <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20"><Users size={26} /></div>
+                <div>
+                  <div className="text-2xl font-black text-white">{totalCandidatesCount}</div>
+                  <div className="text-xs text-slate-400 font-medium">Total Candidates</div>
+                </div>
+              </div>
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg flex items-center space-x-4">
+                <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20"><CheckCircle size={26} /></div>
+                <div>
+                  <div className="text-2xl font-black text-white">{screenedCount}</div>
+                  <div className="text-xs text-slate-400 font-medium">Screened Resumes</div>
+                </div>
+              </div>
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg flex items-center space-x-4">
+                <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20"><TrendingUp size={26} /></div>
+                <div>
+                  <div className="text-2xl font-black text-white">{avgScore}%</div>
+                  <div className="text-xs text-slate-400 font-medium">Average Match Score</div>
+                </div>
+              </div>
+              <div className="bg-slate-900/90 p-5 rounded-2xl border border-slate-800 shadow-lg flex items-center space-x-4">
+                <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20"><Award size={26} /></div>
+                <div>
+                  <div className="text-lg font-extrabold text-white truncate max-w-[130px]">
+                    {topCandidate ? topCandidate.candidate_name : "None"}
+                  </div>
+                  <div className="text-xs text-slate-400 font-medium">Top Match</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Leaderboard Table */}
+            <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-xl">
+              <h3 className="text-base font-bold text-white mb-4">Top Candidate Leaderboard</h3>
+              <CandidateTable
+                candidates={candidates.slice(0, 5)}
+                onViewDetails={(c) => setSelectedCandidate(c)}
+              />
+            </div>
+          </motion.div>
+        )}
+
+        {/* Tab 3: Candidate Directory */}
+        {activeTab === "directory" && (
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-extrabold text-white">Candidate Database & Rankings</h1>
+                <p className="text-xs text-slate-400">Filter candidate profiles by technical skill or minimum screening score</p>
+              </div>
+
+              {/* Search & Filter Inputs */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-3 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Filter by skill (e.g. Python)"
+                    value={searchSkill}
+                    onChange={(e) => setSearchSkill(e.target.value)}
+                    className="pl-9 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div className="relative">
+                  <Filter size={16} className="absolute left-3 top-3 text-slate-500" />
+                  <input
+                    type="number"
+                    placeholder="Min Score % (e.g. 75)"
+                    value={minScoreFilter}
+                    onChange={(e) => setMinScoreFilter(e.target.value)}
+                    className="pl-9 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none w-44"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <CandidateTable
+              candidates={candidates}
+              onViewDetails={(c) => setSelectedCandidate(c)}
+              onDeleteCandidate={handleDeleteCandidate}
+            />
+          </motion.div>
+        )}
+
+        {/* Candidate Detail Modal */}
+        {selectedCandidate && (
+          <CandidateDetailModal
+            candidate={selectedCandidate}
+            onClose={() => setSelectedCandidate(null)}
+          />
+        )}
+      </main>
+
+      {/* Footer with Compact Developer Info */}
+      <footer className="mt-auto bg-slate-900/90 border-t border-slate-800/80 py-6 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          
+          {/* Developer Attribution & Links */}
+          <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 text-xs text-slate-400">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-[10px]">SK</div>
+              <span className="text-slate-300 font-medium">Developed by <strong className="text-white">Sai Kumar</strong></span>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <a href="https://github.com/SAIKUMAR039" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition p-1 bg-slate-800 rounded-md">
+                <Github size={14} />
+              </a>
+              <a href="https://www.linkedin.com/in/sai-kumar-thota-101764252/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition p-1 bg-slate-800 rounded-md">
+                <Linkedin size={14} />
+              </a>
+              <a href="https://www.saikumarthota.live" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition p-1 bg-slate-800 rounded-md">
+                <Globe size={14} />
+              </a>
+              <a href="mailto:saikumarthota2004@gmail.com" className="text-slate-400 hover:text-white transition p-1 bg-slate-800 rounded-md">
+                <Mail size={14} />
+              </a>
+            </div>
           </div>
+
+          {/* Tech Stack Badges & Copyright */}
+          <div className="flex items-center space-x-3 text-[11px] text-slate-500">
+            <span className="hidden sm:inline-block">Python • FastAPI • spaCy • PostgreSQL • React</span>
+            <span>© 2026 AI Resume Screening System</span>
+          </div>
+
         </div>
-
-        {/* Display AI Analysis with text formatting */}
-        <AnimatePresence>
-          {analysis && (
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 30 }}
-              transition={{ 
-                type: "spring", 
-                stiffness: 300, 
-                damping: 30,
-                delay: 0.2
-              }}
-              className="mt-8"
-            >
-              <AnalysisDisplay analysis={analysis} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        
-      </motion.div>
+      </footer>
     </div>
   );
 };
