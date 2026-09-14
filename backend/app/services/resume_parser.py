@@ -6,19 +6,19 @@ from typing import Tuple, Dict, Any
 try:
     import fitz  # PyMuPDF
     HAS_FITZ = True
-except ImportError:
+except Exception:
     HAS_FITZ = False
 
 try:
     import pdfplumber
     HAS_PDFPLUMBER = True
-except ImportError:
+except Exception:
     HAS_PDFPLUMBER = False
 
 try:
     import docx
     HAS_DOCX = True
-except ImportError:
+except Exception:
     HAS_DOCX = False
 
 MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 15 MB limit

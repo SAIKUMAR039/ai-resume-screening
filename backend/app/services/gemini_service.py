@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 try:
     import google.generativeai as genai
     HAS_GENAI = True
-except ImportError:
+except Exception:
     HAS_GENAI = False
 
 class GeminiService:
