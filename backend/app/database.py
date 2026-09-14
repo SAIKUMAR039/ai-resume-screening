@@ -1,4 +1,5 @@
 import os
+import tempfile
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
@@ -11,12 +12,15 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 
 # Build connection URL
 if not DATABASE_URL and SUPABASE_URL:
-    # If Supabase URL provided, use PostgreSQL schema
     DATABASE_URL = os.getenv("SUPABASE_DB_URL", "postgresql://postgres:postgres@localhost:5432/resume_db")
 
 if not DATABASE_URL:
-    # Local fallback sqlite for offline development
-    DATABASE_URL = "sqlite:///./resume_screening.db"
+    # Check if running on Vercel / serverless environment (read-only filesystem except /tmp)
+    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        sqlite_path = os.path.join(tempfile.gettempdir(), "resume_screening.db")
+    else:
+        sqlite_path = "./resume_screening.db"
+    DATABASE_URL = f"sqlite:///{sqlite_path}"
 
 # Handle PostgreSQL url prefix compatibility (postgres:// -> postgresql://)
 if DATABASE_URL.startswith("postgres://"):
@@ -30,12 +34,12 @@ if is_sqlite:
 
 try:
     engine = create_engine(DATABASE_URL, **engine_args)
-    # Test connection
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
 except Exception as e:
     print(f"[Database Warning] PostgreSQL connection failed: {e}. Falling back to SQLite.")
-    DATABASE_URL = "sqlite:///./resume_screening.db"
+    sqlite_path = os.path.join(tempfile.gettempdir(), "resume_screening.db")
+    DATABASE_URL = f"sqlite:///{sqlite_path}"
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
