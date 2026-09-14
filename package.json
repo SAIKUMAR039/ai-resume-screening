@@ -1,7 +1,0 @@
-{
-  "name": "ai-resume-screening-root",
-  "private": true,
-  "scripts": {
-    "build": "npm run build --prefix frontend"
-  }
-}
