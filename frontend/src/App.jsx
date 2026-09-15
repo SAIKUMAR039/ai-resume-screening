@@ -31,7 +31,9 @@ import AnalysisDisplay from "./components/AnalysisDisplay";
 import CandidateTable from "./components/CandidateTable";
 import CandidateDetailModal from "./components/CandidateDetailModal";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const rawApiUrl = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL = rawApiUrl.replace(/\/+$/, "");
+
 
 const SAMPLE_JOB_DESCRIPTIONS = [
   {
@@ -161,7 +163,8 @@ const App = () => {
       }
     } catch (error) {
       console.error("Fetch error:", error);
-      setError("Failed to upload and screen resume. Verify backend server is running on http://localhost:8000.");
+      setError(`Failed to connect to backend API (${API_BASE_URL || "http://localhost:8000"}): ${error.message}. Ensure the backend is active on Render.`);
+
     } finally {
       setLoading(false);
     }
